@@ -285,7 +285,19 @@ namespace oocholmod {
         cholmod_factor *L = cholmod_analyze(sparse, ConfigSingleton::getCommonPtr());
         return Factor(L);
     }
-    
+   
+    void SparseMatrix::write(const char* name) const {
+        FILE *outstr = fopen(name, "w");
+        if (sparse){
+            cholmod_write_sparse(outstr, sparse, 0, 0, ConfigSingleton::getCommonPtr());
+        }
+        else {
+            std::cout<<"No sparse matrix to write - have not been build !\n";
+        }
+        fclose(outstr);
+    }
+
+ 
     void SparseMatrix::zero(){
 #ifdef DEBUG
         assertHasSparse();
@@ -545,7 +557,50 @@ namespace oocholmod {
         M.jColumn = ((int*)sparse->p);
         return move(M);
     }
-    
+   
+    void SparseMatrix::symmetrize(){
+
+	// The original must be asymmetric
+	assert(symmetry == ASYMMETRIC);
+	
+	// allocate a new SYMMETRIX UPPER triplet matrix !
+	cholmod_triplet *triplet_symm = cholmod_allocate_triplet(static_cast<int>(sparse->nrow),static_cast<int>(sparse->ncol),
+					  	(int)cholmod_nnz(sparse,ConfigSingleton::getCommonPtr()),SYMMETRIC_UPPER,CHOLMOD_REAL, ConfigSingleton::getCommonPtr());
+
+	// Insert the upper part of sparse into the new triplet
+	int idx=0;	
+	for (int col=0;col<ncol;col++){
+                int iFrom = ((int*)sparse->p)[col];
+                int iTo = ((int*)sparse->p)[col+1]-1;
+                for (int i=iFrom;i<=iTo;i++){
+                        int row = ((int*)sparse->i)[i];
+			if (col >= row){ // Upper half
+				((int*)triplet_symm->i)[triplet_symm->nnz] = row;
+				((int*)triplet_symm->j)[triplet_symm->nnz] = col;
+				((double*)triplet_symm->x)[triplet_symm->nnz] = ((double*)sparse->x)[idx];
+				triplet_symm->nnz++;
+			}
+                        idx++;
+                }
+        }	
+
+	// Make sure not to leak
+	cholmod_free_sparse(&sparse, ConfigSingleton::getCommonPtr());
+	
+	// build the new sparse matrix
+        sparse = cholmod_triplet_to_sparse(triplet_symm, triplet_symm->nnz, ConfigSingleton::getCommonPtr());
+	// deallocate the triplet
+        cholmod_free_triplet(&triplet_symm, ConfigSingleton::getCommonPtr());
+        triplet_symm = nullptr;
+	// Set pointers to the sparse data
+        values = ((double*)sparse->x);
+        iRow = ((int*)sparse->i);
+        jColumn = ((int*)sparse->p);
+
+	
+
+    }
+ 
     DenseMatrix solve(const SparseMatrix& A, const DenseMatrix& b)
     {
 #ifdef DEBUG

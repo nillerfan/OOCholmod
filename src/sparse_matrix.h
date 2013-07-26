@@ -83,6 +83,9 @@ namespace oocholmod {
  
         // Print
         friend std::ostream& operator<<(std::ostream& os, const SparseMatrix& A);
+
+	// write to matrix market format
+	void write(const char* name = "") const;
         
         // hasElement only valid on built matrix
         bool hasElement(unsigned int row, unsigned int column) const;
@@ -125,7 +128,9 @@ namespace oocholmod {
         SparseMatrix copy() const;
         
         Factor analyze() const;
-        
+       
+	void symmetrize();
+ 
         void zero();
         
         void setSymmetry(Symmetry symmetry);
